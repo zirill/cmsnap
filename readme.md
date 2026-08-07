@@ -3,7 +3,8 @@
 Reproduce the published [CMSnap-LITE](https://cmsnap.sqliteonline.com/) benchmarks
 on your own machine. One script, nothing installed system-wide.
 
-**Requirements:** Linux (x86_64 / arm64 / riscv64), `curl`, [`wrk`](https://github.com/wg/wrk).
+**Requirements:** Linux (x86_64 / arm64 / riscv64), `curl`, [`wrk`](https://github.com/wg/wrk)
+(if wrk is missing, the script offers to install it via your package manager).
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zirill/cmsnap/main/bench.sh | sh
