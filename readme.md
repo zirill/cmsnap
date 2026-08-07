@@ -30,8 +30,22 @@ Tests:
 4. JSON API, cache off (`/api/docs` on every site)
 5. write: public form POST (honeypot + per-IP limiter on)
 
-Tunables: `DURATION=60 CONNS=100 SITES=100 PORT=8080`.
-Results append to `results.txt`; `rm -rf run results.txt` removes every trace.
+Every knob is an environment variable:
+
+```sh
+SITES=1000 ./bench.sh 2        # a 1000-site node instead of the default 100
+DURATION=120 CONNS=400 ./bench.sh 3
+```
+
+- `SITES` — how many sites the node runs in tests 2–4 (default 100); the node
+  is rebuilt automatically when the number changes
+- `DURATION` — seconds per measurement (default 60, after a 10 s warmup)
+- `CONNS` — connections wrk keeps open (default 100)
+- `PORT` — server port (default 8080)
+- `SERVER_CPUS` / `LOAD_CPUS` — override the automatic core split
+
+Results append to `results.txt` together with the machine details (binary
+version, kernel, CPU, RAM, pinning); `rm -rf run results.txt` removes every trace.
 
 For publishable numbers: disable turbo, close background apps, run each test
 three times, keep the median.
