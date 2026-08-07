@@ -28,18 +28,21 @@ PORT=${PORT:-8080}
 command -v curl >/dev/null 2>&1 || { echo "error: curl not found" >&2; exit 1; }
 if ! command -v wrk >/dev/null 2>&1; then
     inst=""
-    if   command -v apt-get >/dev/null 2>&1; then inst="apt-get install -y wrk"
+    if   command -v apt-get >/dev/null 2>&1; then inst="apt-get update && apt-get install -y wrk"
     elif command -v dnf     >/dev/null 2>&1; then inst="dnf install -y wrk"
     elif command -v pacman  >/dev/null 2>&1; then inst="pacman -S --noconfirm wrk"
     elif command -v apk     >/dev/null 2>&1; then inst="apk add wrk"
     fi
-    [ "$(id -u)" = 0 ] || inst="${inst:+sudo $inst}"
+    sudo=""; [ "$(id -u)" = 0 ] || sudo="sudo "
     if [ -n "$inst" ]; then
-        printf 'wrk not found — install it now (%s)? [y/N] ' "$inst"
+        printf 'wrk not found — install it now (%s%s)? [y/N] ' "$sudo" "$inst"
         read -r a </dev/tty 2>/dev/null || a=n
-        case "$a" in y|Y) $inst || true ;; esac
+        case "$a" in y|Y) ${sudo:+sudo }sh -c "$inst" || true ;; esac
     fi
-    command -v wrk >/dev/null 2>&1 || { echo "error: wrk not found (https://github.com/wg/wrk)" >&2; exit 1; }
+    command -v wrk >/dev/null 2>&1 || {
+        echo "error: wrk not found — no package on this distro (Debian has none); build it: https://github.com/wg/wrk" >&2
+        exit 1
+    }
 fi
 
 # CPU pinning: physical topology from `lscpu -e` — the server gets ~2/3 of
@@ -234,7 +237,9 @@ run_test() {
 }
 
 menu() {
-    cat <<'EOF'
+    # Called as $(menu): stdout is captured, so everything meant for the
+    # eye goes to stderr — only the picked number is the "return value".
+    cat >&2 <<'EOF'
 CMSnap-LITE public benchmark — pick a test:
   1) cached page, 1 site           (the "page from cache" discipline)
   2) cached page, N sites          (multi-site Host routing, default N=100)
@@ -242,7 +247,7 @@ CMSnap-LITE public benchmark — pick a test:
   4) JSON API, cache off           (/api/docs on every site)
   5) write: public form POST       (honeypot + per-IP limiter on, X-Real-IP cycled)
 EOF
-    printf 'test [1-5]: '
+    printf 'test [1-5]: ' >&2
     read -r t </dev/tty
     echo "$t"
 }
