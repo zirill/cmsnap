@@ -97,6 +97,15 @@ if [ ! -x "$run/cms" ]; then
     "$run/cms" --version
 fi
 
+# ── environment block, written next to every result ──────────────────
+cpu=$(lscpu 2>/dev/null | sed -n 's/^Model name:[[:space:]]*//p' | head -1)
+mem=$(awk '/MemTotal/ { printf "%.1f GiB RAM", $2 / 1048576 }' /proc/meminfo)
+pins_txt="none"
+[ -n "${SERVER_CPUS:-}" ] && pins_txt="server cpus $SERVER_CPUS, load cpus $LOAD_CPUS"
+env_info="   $("$run/cms" --version) | $(uname -srm)
+   ${cpu:-unknown CPU} ($(nproc) threads) | $mem
+   pinning: $pins_txt | $(wrk -v 2>&1 | head -1 | cut -d' ' -f1-2)"
+
 # ── 2. example site (the same one every visitor gets) ────────────────
 if [ ! -d "$run/www" ]; then
     echo "== unpacking the example site (admin password prints below — not needed for the bench)"
@@ -207,7 +216,7 @@ load() { # load [lua-script]
 
 run_test() {
     echo "== $2" | tee -a "$here/results.txt"
-    date -u '+%Y-%m-%d %H:%M UTC' >> "$here/results.txt"
+    { date -u '+%Y-%m-%d %H:%M UTC'; echo "$env_info"; } >> "$here/results.txt"
     case "$1" in
         1) cache on;  start_server; load ;;
         2) build_sites; cache on;  start_server; load hosts.lua ;;
