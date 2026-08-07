@@ -217,7 +217,7 @@ CMSnap-LITE public benchmark — pick a test:
   5) write: public form POST       (honeypot + per-IP limiter on, X-Real-IP cycled)
 EOF
     printf 'test [1-5]: '
-    read -r t
+    read -r t </dev/tty
     echo "$t"
 }
 
