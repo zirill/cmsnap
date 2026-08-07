@@ -26,7 +26,21 @@ SITES=${SITES:-100}
 PORT=${PORT:-8080}
 
 command -v curl >/dev/null 2>&1 || { echo "error: curl not found" >&2; exit 1; }
-command -v wrk  >/dev/null 2>&1 || { echo "error: wrk not found (https://github.com/wg/wrk)" >&2; exit 1; }
+if ! command -v wrk >/dev/null 2>&1; then
+    inst=""
+    if   command -v apt-get >/dev/null 2>&1; then inst="apt-get install -y wrk"
+    elif command -v dnf     >/dev/null 2>&1; then inst="dnf install -y wrk"
+    elif command -v pacman  >/dev/null 2>&1; then inst="pacman -S --noconfirm wrk"
+    elif command -v apk     >/dev/null 2>&1; then inst="apk add wrk"
+    fi
+    [ "$(id -u)" = 0 ] || inst="${inst:+sudo $inst}"
+    if [ -n "$inst" ]; then
+        printf 'wrk not found — install it now (%s)? [y/N] ' "$inst"
+        read -r a </dev/tty 2>/dev/null || a=n
+        case "$a" in y|Y) $inst || true ;; esac
+    fi
+    command -v wrk >/dev/null 2>&1 || { echo "error: wrk not found (https://github.com/wg/wrk)" >&2; exit 1; }
+fi
 
 # CPU pinning: physical topology from `lscpu -e` — the server gets ~2/3 of
 # the physical cores (with their SMT siblings), the load generator gets the
