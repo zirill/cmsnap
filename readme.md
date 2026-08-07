@@ -6,8 +6,13 @@ on your own machine. One script, nothing installed system-wide.
 **Requirements:** Linux (x86_64 / arm64 / riscv64), `curl`, [`wrk`](https://github.com/wg/wrk).
 
 ```sh
-curl -fLO https://raw.githubusercontent.com/zirill/cmsnap/main/bench.sh
-chmod +x bench.sh
+curl -fsSL https://raw.githubusercontent.com/zirill/cmsnap/main/bench.sh | sh
+```
+
+Or keep the script around:
+
+```sh
+curl -fLO https://raw.githubusercontent.com/zirill/cmsnap/main/bench.sh && chmod +x bench.sh
 ./bench.sh        # interactive menu
 ./bench.sh 2      # or run a test directly
 ```
