@@ -129,7 +129,13 @@ build_sites() {
     echo "== building $SITES sites (copies of the example)"
     rm -rf "$run/www/site"0*
     src=$(ls -d "$run/www/"* | head -1)
-    rm -rf "$src/db"
+    # Seed the example db once — every clone copies it ready-made, so the
+    # first start of the N-site node opens files instead of running N seeds.
+    if [ ! -d "$src/db" ]; then
+        echo "-- seeding the example site db (one-off)"
+        start_server
+        stop_server
+    fi
     i=1
     while [ "$i" -le "$SITES" ]; do
         cp -r "$src" "$run/www/$(printf 'site%04d' "$i")"
