@@ -148,9 +148,12 @@ EOF
 
 # ── 3. multi-site node: clone the example into N sites ───────────────
 build_sites() {
-    [ -d "$run/www/site0001" ] && return 0
+    # Rebuilt whenever the clone count and $SITES disagree — a stale node
+    # would route the extra Hosts to the default site and fake the numbers.
+    have=$(ls -d "$run/www/site"[0-9]* 2>/dev/null | wc -l)
+    [ "$have" -eq "$SITES" ] && return 0
     echo "== building $SITES sites (copies of the example)"
-    rm -rf "$run/www/site"0*
+    rm -rf "$run/www/site"[0-9]*
     src=$(ls -d "$run/www/"* | head -1)
     # Seed the example db once — every clone copies it ready-made, so the
     # first start of the N-site node opens files instead of running N seeds.
