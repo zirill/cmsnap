@@ -28,7 +28,8 @@ Tests:
 2. cached page, 100 sites (multi-site Host routing)
 3. page from database, 100 sites (cache off: SQLite read + render per request)
 4. JSON API, cache off (`/api/docs` on every site)
-5. write: public form POST (honeypot + per-IP limiter on)
+5. write: public form POST into one site's database (honeypot + per-IP limiter on)
+6. write across N sites — the POSTs fan out by Host, every site's own database takes inserts at once
 
 Every knob is an environment variable:
 
