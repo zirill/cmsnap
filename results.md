@@ -2,8 +2,7 @@
 
 Engine: **CMSnap-LITE-M 0.2.2**, official release binary.
 Harness: [`bench.sh`](bench.sh) from this repo — it downloads the binary,
-pins the CPUs and drives the load itself. Raw wrk output for every run,
-including the discarded ones: [`results-epyc32.txt`](results-epyc32.txt).
+pins the CPUs and drives the load itself.
 
 ## Setup
 
@@ -87,7 +86,7 @@ any realistic burst.
 
 ## Discarded runs (and why)
 
-The raw log keeps every run. Not counted above:
+Not everything measured made the cut:
 
 - runs with the server spanning both CCDs (shared L3 with the generator —
   45k req/s per core against 65k clean);
