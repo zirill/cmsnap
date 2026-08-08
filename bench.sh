@@ -144,17 +144,22 @@ setup = function(thread)
     thread:set("tid", counter)
     counter = counter + 1
 end
+-- WRITE_FANOUT=N (test 6) rotates the Host header across N sites, so
+-- every site's own database takes inserts at once; 0 = default site only.
 local stride = math.floor(2 ^ 24 / tonumber(os.getenv("THREADS") or "32"))
+local fan = tonumber(os.getenv("WRITE_FANOUT") or "0")
 local i = 0
 local body = "name=Load&email=l%40t.io&message=hello+from+bench"
 request = function()
     i = i + 1
     local n = tid * stride + i % stride
-    return wrk.format("POST", "/api/feedback",
-        { ["Content-Type"] = "application/x-www-form-urlencoded",
-          ["X-Real-IP"] = string.format("10.%d.%d.%d",
-              math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256) },
-        body)
+    local hdr = { ["Content-Type"] = "application/x-www-form-urlencoded",
+                  ["X-Real-IP"] = string.format("10.%d.%d.%d",
+                      math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256) }
+    if fan > 0 then
+        hdr["Host"] = string.format("site%04d.test", (i + tid) % fan + 1)
+    end
+    return wrk.format("POST", "/api/feedback", hdr, body)
 end
 EOF
 
@@ -232,11 +237,13 @@ reset_form_db() {
 
 load() { # load [lua-script]
     echo "-- warmup 10s"
-    SITES=$SITES THREADS=$THREADS $pin_load wrk -t"$THREADS" -c"$CONNS" -d10s \
-        ${1:+-s "$run/$1"} "http://127.0.0.1:$PORT/" >/dev/null 2>&1 || true
+    SITES=$SITES THREADS=$THREADS WRITE_FANOUT=${wfan:-0} $pin_load wrk \
+        -t"$THREADS" -c"$CONNS" -d10s ${1:+-s "$run/$1"} \
+        "http://127.0.0.1:$PORT/" >/dev/null 2>&1 || true
     echo "-- measuring ${DURATION}s, ${THREADS}t/${CONNS}c"
-    SITES=$SITES THREADS=$THREADS $pin_load wrk -t"$THREADS" -c"$CONNS" -d"${DURATION}s" \
-        --latency ${1:+-s "$run/$1"} "http://127.0.0.1:$PORT/" | tee -a "$here/results.txt"
+    SITES=$SITES THREADS=$THREADS WRITE_FANOUT=${wfan:-0} $pin_load wrk \
+        -t"$THREADS" -c"$CONNS" -d"${DURATION}s" --latency ${1:+-s "$run/$1"} \
+        "http://127.0.0.1:$PORT/" | tee -a "$here/results.txt"
 }
 
 run_test() {
