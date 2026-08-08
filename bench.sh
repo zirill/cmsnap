@@ -40,7 +40,7 @@ if ! command -v wrk >/dev/null 2>&1; then
         case "$a" in y|Y) ${sudo:+sudo }sh -c "$inst" || true ;; esac
     fi
     command -v wrk >/dev/null 2>&1 || {
-        echo "error: wrk not found — no package on this distro (Debian has none); build it: https://github.com/wg/wrk" >&2
+        echo "error: wrk not found — install it from your distro or build it: https://github.com/wg/wrk" >&2
         exit 1
     }
 fi
@@ -225,14 +225,46 @@ cache() { # cache on|off in the root settings.json
     esac
 }
 
-# Test 5 fills the default site's feedback table — start every run from
-# the seeded state (the server rebuilds a missing db/ on start), or runs
-# would append onto each other's millions of rows.
-reset_form_db() {
-    dom=$(sed -n 's/.*"default": *"\([^"]*\)".*/\1/p' "$run/settings.json" | head -1)
-    dir=""
-    [ -n "$dom" ] && dir=$(sed -n "s/.*\"$dom\": *\"\([^\"]*\)\".*/\1/p" "$run/settings.json" | head -1)
-    rm -rf "$run/www/${dir:-default}/db"
+# The databases a write test touches: every clone with fan-out (test 6),
+# else the default site of the map (test 5).
+write_dbs() {
+    if [ "${wfan:-0}" -gt 0 ]; then
+        ls -d "$run/www/site"[0-9]*/db 2>/dev/null
+    else
+        dom=$(sed -n 's/.*"default": *"\([^"]*\)".*/\1/p' "$run/settings.json" | head -1)
+        dir=""
+        [ -n "$dom" ] && dir=$(sed -n "s/.*\"$dom\": *\"\([^\"]*\)\".*/\1/p" "$run/settings.json" | head -1)
+        [ -n "$dir" ] && echo "$run/www/$dir/db"
+    fi
+}
+
+# Every write run starts from the seeded state: the participating dbs are
+# restored from the example site's seeded copy (a file copy, not a re-seed)
+# — repeated runs are identical, nothing accumulates.
+reset_write_dbs() {
+    src="$run/www/default/db"
+    [ -d "$src" ] || return 0
+    for d in $(write_dbs); do
+        [ "$d" = "$src" ] && continue
+        rm -rf "$d"
+        cp -r "$src" "$d"
+    done
+}
+
+# The committed-inserts metric must come out of this script, not be taken
+# on trust: after the queue drains, count the rows that actually landed.
+committed_report() {
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo "-- committed rows: not counted (no sqlite3 on this machine)" | tee -a "$here/results.txt"
+        return 0
+    fi
+    total=0
+    for d in $(write_dbs); do
+        n=$(sqlite3 "$d/main.db" 'SELECT count(*) FROM feedback;' 2>/dev/null) || n=0
+        total=$((total + ${n:-0}))
+    done
+    secs=$((DURATION + 10))
+    echo "committed rows: $total (~$((total / secs))/s over warmup+measure)" | tee -a "$here/results.txt"
 }
 
 load() { # load [lua-script]
@@ -256,13 +288,17 @@ run_test() {
         4) build_sites; cache off; start_server
            BENCH_PATH=/api/docs load hosts.lua
            cache on ;;
-        5) build_sites; reset_form_db; cache on; start_server; load post.lua ;;
-        # Spread writes leave ~10-20k rows per site per run — too shallow to
-        # move insert cost, so only the default site's db is reset.
+        # Write tests: the trailing sleep lets the writers drain their
+        # queues while the server is still up — the row count that follows
+        # must see everything that was accepted.
+        5) build_sites; reset_write_dbs; cache on; start_server
+           load post.lua; sleep 3 ;;
         6) wfan=$SITES
-           build_sites; reset_form_db; cache on; start_server; load post.lua ;;
+           build_sites; reset_write_dbs; cache on; start_server
+           load post.lua; sleep 3 ;;
     esac
     stop_server
+    case "$1" in 5|6) committed_report ;; esac
     echo | tee -a "$here/results.txt"
 }
 
