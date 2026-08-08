@@ -256,7 +256,11 @@ run_test() {
         4) build_sites; cache off; start_server
            BENCH_PATH=/api/docs load hosts.lua
            cache on ;;
-        5) reset_form_db; cache on; start_server; load post.lua ;;
+        5) build_sites; reset_form_db; cache on; start_server; load post.lua ;;
+        # Spread writes leave ~10-20k rows per site per run — too shallow to
+        # move insert cost, so only the default site's db is reset.
+        6) wfan=$SITES
+           build_sites; reset_form_db; cache on; start_server; load post.lua ;;
     esac
     stop_server
     echo | tee -a "$here/results.txt"
@@ -272,8 +276,9 @@ CMSnap-LITE public benchmark — pick a test:
   3) page from database, N sites   (cache off: SQLite read + render per request)
   4) JSON API, cache off           (/api/docs on every site)
   5) write: public form POST       (honeypot + per-IP limiter on, X-Real-IP cycled)
+  6) write across N sites          (POSTs fan out by Host: every site's db takes inserts)
 EOF
-    printf 'test [1-5]: ' >&2
+    printf 'test [1-6]: ' >&2
     read -r t </dev/tty
     echo "$t"
 }
@@ -284,7 +289,8 @@ case "$t" in
     2) run_test 2 "cached page, $SITES sites" ;;
     3) run_test 3 "page from database (cache off), $SITES sites" ;;
     4) run_test 4 "JSON API /api/docs (cache off), $SITES sites" ;;
-    5) run_test 5 "write: POST /api/feedback (form intake)" ;;
+    5) run_test 5 "write: POST /api/feedback, one site ($SITES-site node)" ;;
+    6) run_test 6 "write across sites: POST /api/feedback, $SITES sites" ;;
     *) echo "unknown test '$t'" >&2; exit 1 ;;
 esac
 echo "results appended to results.txt"
