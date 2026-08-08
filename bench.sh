@@ -133,19 +133,28 @@ request = function()
 end
 EOF
 cat > "$run/post.lua" <<'EOF'
--- POST the example site's public contact form. X-Real-IP cycles through
--- 10.x.y.z so the per-IP form limiter sees millions of distinct clients —
--- the engine is measured, not the limiter (bench.sh set the trusted-proxy
--- mode via `cms tune proxy`).
+-- POST the example site's public contact form. The 10/8 space is cut
+-- into one stripe per wrk thread (setup numbers them): threads all count
+-- from zero, so a shared sequence would send every IP once PER THREAD
+-- and trip the per-IP form limiter. Striped, no IP repeats within a run
+-- — the engine is measured, not the limiter (bench.sh set the
+-- trusted-proxy mode via `cms tune proxy`).
+local counter = 0
+setup = function(thread)
+    thread:set("tid", counter)
+    counter = counter + 1
+end
+local stride = math.floor(2 ^ 24 / tonumber(os.getenv("THREADS") or "32"))
 local i = 0
 local body = "name=Load&email=l%40t.io&message=hello+from+bench"
 request = function()
     i = i + 1
-    local ip = string.format("10.%d.%d.%d",
-        math.floor(i / 65536) % 256, math.floor(i / 256) % 256, i % 256)
+    local n = tid * stride + i % stride
     return wrk.format("POST", "/api/feedback",
         { ["Content-Type"] = "application/x-www-form-urlencoded",
-          ["X-Real-IP"] = ip }, body)
+          ["X-Real-IP"] = string.format("10.%d.%d.%d",
+              math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256) },
+        body)
 end
 EOF
 
@@ -211,13 +220,23 @@ cache() { # cache on|off in the root settings.json
     esac
 }
 
+# Test 5 fills the default site's feedback table — start every run from
+# the seeded state (the server rebuilds a missing db/ on start), or runs
+# would append onto each other's millions of rows.
+reset_form_db() {
+    dom=$(sed -n 's/.*"default": *"\([^"]*\)".*/\1/p' "$run/settings.json" | head -1)
+    dir=""
+    [ -n "$dom" ] && dir=$(sed -n "s/.*\"$dom\": *\"\([^\"]*\)\".*/\1/p" "$run/settings.json" | head -1)
+    rm -rf "$run/www/${dir:-default}/db"
+}
+
 load() { # load [lua-script]
     echo "-- warmup 10s"
-    $pin_load wrk -t"$THREADS" -c"$CONNS" -d10s ${1:+-s "$run/$1"} \
-        "http://127.0.0.1:$PORT/" >/dev/null 2>&1 || true
+    SITES=$SITES THREADS=$THREADS $pin_load wrk -t"$THREADS" -c"$CONNS" -d10s \
+        ${1:+-s "$run/$1"} "http://127.0.0.1:$PORT/" >/dev/null 2>&1 || true
     echo "-- measuring ${DURATION}s, ${THREADS}t/${CONNS}c"
-    SITES=$SITES $pin_load wrk -t"$THREADS" -c"$CONNS" -d"${DURATION}s" --latency \
-        ${1:+-s "$run/$1"} "http://127.0.0.1:$PORT/" | tee -a "$here/results.txt"
+    SITES=$SITES THREADS=$THREADS $pin_load wrk -t"$THREADS" -c"$CONNS" -d"${DURATION}s" \
+        --latency ${1:+-s "$run/$1"} "http://127.0.0.1:$PORT/" | tee -a "$here/results.txt"
 }
 
 run_test() {
@@ -230,7 +249,7 @@ run_test() {
         4) build_sites; cache off; start_server
            BENCH_PATH=/api/docs load hosts.lua
            cache on ;;
-        5) cache on; start_server; load post.lua ;;
+        5) reset_form_db; cache on; start_server; load post.lua ;;
     esac
     stop_server
     echo | tee -a "$here/results.txt"
