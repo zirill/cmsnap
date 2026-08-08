@@ -3,6 +3,8 @@
 Reproduce the published [CMSnap-LITE](https://cmsnap.sqliteonline.com/) benchmarks
 on your own machine. One script, nothing installed system-wide.
 
+Published results: **[32-core EPYC 9554 — 1M req/s, 10,000 sites, write scaling](results.md)**.
+
 **Requirements:** Linux (x86_64 / arm64 / riscv64), `curl`, [`wrk`](https://github.com/wg/wrk)
 (if wrk is missing, the script offers to install it via your package manager).
 
