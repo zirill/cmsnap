@@ -9,10 +9,11 @@ pins the CPUs and drives the load itself.
 | what | value |
 |------|-------|
 | hardware | AMD EPYC 9554 (KVM guest): 32 physical cores / 64 SMT threads — two 16-core CCDs with separate L3; 128 GB RAM; Debian 13, kernel 6.12 |
-| server under test | pinned to the first CCD — 16 physical cores / 32 threads (`taskset 0-31`), its own L3 |
-| load | wrk 4.1 on the second CCD (`taskset 32-63`, 32 threads) — full cache isolation from the server |
+| server under test | pinned to 16 cores (`taskset 0-31`) — a separate guest-visible L3 domain |
+| load | wrk 4.1 on the other 16 cores (`taskset 32-63`, 32 threads) — it never shares a guest-visible cache domain with the server |
 | runs | 10 s warmup, 180 s measurement; access log ON |
 | page | the stock example site's landing page, ~11.4 KB, no compression requested |
+| scope | all runs over localhost — this measures the engine's CPU ceiling; over a real network NIC, TLS and bandwidth add on top |
 
 ```sh
 SERVER_CPUS=0-31 LOAD_CPUS=32-63 THREADS=32 DURATION=180 CONNS=500 ./bench.sh <test>
@@ -28,7 +29,7 @@ SERVER_CPUS=0-31 LOAD_CPUS=32-63 THREADS=32 DURATION=180 CONNS=500 ./bench.sh <t
 |         500 | 1,039,784 | 435 µs | 3.5 ms |
 |        1000 | 1,042,959 | 900 µs | 4.1 ms |
 
-**One CPU socket serves a million requests per second at a sub-200 µs
+**Sixteen server cores serve a million requests per second at a sub-200 µs
 median.** The knee sits near 200 connections; past it, extra connections buy
 queue depth, not throughput — the last 3% cost a fivefold median. The flat
 ~3 ms p99 is hypervisor scheduling jitter (it does not move with queue depth).
@@ -58,10 +59,13 @@ latency** (7.5% on the live-database path).
 ## Writes scale with databases
 
 The write test POSTs the public contact form — honeypot, per-IP rate limiter
-and a redirect on every request. Durable rates are verified against bytes on
-disk after each run.
+and a redirect on every request. Committed rates are counted in the databases
+after the queues drain — `bench.sh` prints the row count and rate after every
+write run, so the metric comes out of the script, not on trust. The p50/p99
+columns are HTTP response latency (accept + validate + enqueue), not commit
+latency.
 
-| databases taking inserts | durable inserts/s |    p50 |    p99 |
+| databases taking inserts | committed inserts/s |    p50 |    p99 |
 |-------------------------:|------------------:|-------:|-------:|
 |                        1 |          ~197,000 | 535 µs | 4.7 ms |
 |                      100 |           494,769 | 491 µs |  99 ms |
