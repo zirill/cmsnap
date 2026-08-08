@@ -85,8 +85,6 @@ any realistic burst.
 - A 10,000-site node needs `vm.max_map_count` raised (the 65,530 default runs
   out near 3,000 sites: `sysctl -w vm.max_map_count=1048576`) and
   `ulimit -n` above the default 1024.
-- Warm restart of the whole 10,000-site node — binary swap, config reload —
-  is about 10 seconds to first served request.
 
 ## Discarded runs (and why)
 
